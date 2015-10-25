@@ -1,10 +1,15 @@
 package io.ruck.microservice;
 
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.google.inject.Module;
 import io.undertow.Undertow;
 import java.util.ServiceLoader;
 import javax.ws.rs.core.Application;
 import org.jboss.resteasy.plugins.server.undertow.UndertowJaxrsServer;
 import io.undertow.Undertow.Builder;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  *
@@ -12,9 +17,12 @@ import io.undertow.Undertow.Builder;
  */
 public class Server {
 
+    private static final Logger LOG = LogManager.getLogger();
     private final UndertowJaxrsServer server;
+    private final Injector injector;
 
     public Server() {
+        injector = Guice.createInjector(ServiceLoader.load(Module.class));
         server = new UndertowJaxrsServer();
     }
 
@@ -23,13 +31,19 @@ public class Server {
     }
 
     public void start(int port, String host) {
-        start(Undertow.builder().addHttpListener(port, host));
+        start(Undertow
+                .builder()
+                .addHttpListener(port, host));
     }
 
     public void start(Builder b) {
-        ServiceLoader.load(Application.class)
+        ServiceClassLoader.load(Application.class)
                 .iterator()
-                .forEachRemaining(app -> server.deploy(app));
+                .forEachRemaining(app -> {
+                    LOG.info("deploying " + app);
+                    injector.injectMembers(app);
+                    server.deploy(injector.getInstance(app));
+                });
         server.start(b);
     }
 
